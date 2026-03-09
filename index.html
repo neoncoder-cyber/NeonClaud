@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeonCloud | Secure Digital Vault</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --neon-cyan: #00f2ff;
+            --neon-purple: #bc13fe;
+            --dark-bg: #0a0b10;
+            --card-bg: #161b22;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 1000px;
+            background: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+            border: 1px solid #30363d;
+        }
+
+        h1 {
+            text-align: center;
+            letter-spacing: 5px;
+            text-shadow: 0 0 10px var(--neon-cyan);
+            color: var(--neon-cyan);
+        }
+
+        /* Giriş Paneli */
+        #auth-section { display: flex; flex-direction: column; gap: 15px; max-width: 400px; margin: auto; }
+        input {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            padding: 12px;
+            color: white;
+            border-radius: 8px;
+            outline: none;
+        }
+        input:focus { border-color: var(--neon-cyan); box-shadow: 0 0 5px var(--neon-cyan); }
+
+        button {
+            background: transparent;
+            border: 2px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        button:hover { background: var(--neon-cyan); color: black; box-shadow: 0 0 15px var(--neon-cyan); }
+
+        /* Dosya Paneli */
+        #dashboard { display: none; }
+        .nav { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        
+        .upload-area {
+            border: 2px dashed #30363d;
+            padding: 40px;
+            text-align: center;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            transition: 0.3s;
+        }
+        .upload-area:hover { border-color: var(--neon-cyan); background: rgba(0, 242, 255, 0.05); }
+
+        .file-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .file-card {
+            background: #0d1117;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid var(--neon-purple);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .file-card a { color: var(--neon-cyan); text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>NEON<span style="color:white">CLOUD</span></h1>
+
+    <div id="auth-section">
+        <input type="email" id="email" placeholder="E-posta">
+        <input type="password" id="password" placeholder="Şifre">
+        <button onclick="signUp()">Kayıt Ol</button>
+        <button onclick="signIn()">Giriş Yap</button>
+    </div>
+
+    <div id="dashboard">
+        <div class="nav">
+            <span id="user-display">Kullanıcı: ...</span>
+            <button onclick="signOut()" style="padding: 5px 15px;">Çıkış</button>
+        </div>
+
+        <div class="upload-area" id="drop-zone">
+            <p>Dosyaları buraya sürükleyin veya</p>
+            <input type="file" id="file-input" style="display: none;">
+            <button onclick="document.getElementById('file-input').click()">Dosya Seç</button>
+        </div>
+
+        <h3>Dosyalarınız</h3>
+        <div id="file-list" class="file-grid">
+            </div>
+    </div>
+</div>
+
+<script>
+    // --- SUPABASE AYARLARI ---
+    const SUPABASE_URL = 'BURAYA_URL_GELECEK';
+    const SUPABASE_ANON_KEY = 'BURAYA_KEY_GELECEK';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // --- AUTH İŞLEMLERİ ---
+    async function signUp() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) alert(error.message); else alert("Onay e-postası gönderildi!");
+    }
+
+    async function signIn() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) alert(error.message); else checkUser();
+    }
+
+    async function signOut() {
+        await supabase.auth.signOut();
+        location.reload();
+    }
+
+    // --- KULLANICI KONTROL ---
+    async function checkUser() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            document.getElementById('auth-section').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('user-display').innerText = user.email;
+            loadFiles(user.id);
+        }
+    }
+
+    // --- DOSYA İŞLEMLERİ ---
+    async function loadFiles(userId) {
+        const { data, error } = await supabase.storage.from('neon-files').list(userId);
+        const listDiv = document.getElementById('file-list');
+        listDiv.innerHTML = '';
+
+        if (data) {
+            data.forEach(file => {
+                const card = document.createElement('div');
+                card.className = 'file-card';
+                card.innerHTML = `
+                    <span style="overflow: hidden; text-overflow: ellipsis;">📄 ${file.name}</span>
+                    <button onclick="getLink('${userId}/${file.name}')">Paylaş / İndir</button>
+                `;
+                listDiv.appendChild(card);
+            });
+        }
+    }
+
+    async function getLink(path) {
+        const { data } = await supabase.storage.from('neon-files').createSignedUrl(path, 3600); // 1 saatlik link
+        window.open(data.signedUrl, '_blank');
+    }
+
+    // Dosya Yükleme Dinleyicisi
+    document.getElementById('file-input').onchange = async (e) => {
+        const file = e.target.files[0];
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const { data, error } = await supabase.storage
+            .from('neon-files')
+            .upload(`${user.id}/${file.name}`, file);
+
+        if (error) alert("Yükleme hatası: " + error.message);
+        else loadFiles(user.id);
+    };
+
+    checkUser();
+</script>
+</body>
+</html>
